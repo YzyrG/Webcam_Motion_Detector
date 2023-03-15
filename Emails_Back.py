@@ -1,100 +1,57 @@
-import email
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.image import MIMEImage
+from email.utils import formataddr
 import smtplib
-import time
-import cv2
+import os
+import ssl
 
-# opencv 讀取的 channel 順序是 B → G → R
 
-# 获取网络摄像头
-# 参数是视频的路径，参数为数字时代表从摄像头获取视频
-video = cv2.VideoCapture(0)
+def create_email(image):
+    # related类型将图片以内嵌资源的方式存储在邮件中
+    msg = MIMEMultipart('related')
+    msg["From"] = formataddr(("My Motion Detector", "15683966878@163.com"))
+    msg['To'] = formataddr(("ZYR", "245632738@qq.com"))
+    msg['Subject'] = "检测到有物体出现！"
 
-# 判断摄像头是否正常开启
-if not video.isOpened():
-    print("Cannot open camera")
-    exit()
+    # 邮件正文
+    content = MIMEText('<html><head><style>#string{color:red;text-align:center;font-size:10px;}</style>'
+                       '<div id="string">检测到新物体：<div></head><body><img src="cid:image1" '
+                       'alt="image1"></body></html>', 'html', 'utf-8')
+    msg.attach(content)
 
-while True:
-    # 读取视频的下一帧，check返回值为是否成功获取视频帧
-    # frame返回值为返回的视频帧
-    check, frame = video.read()
-    # 如果读取错误，给出提示
-    if not check:
-        print("Cannot receive frame")
-        break
-    # 如果读取成功，显示读该帧的画面窗口，窗口名为my video
-    cv2.imshow('my video', frame)
-    # 會使用 cv2.waitKey() 來等待使用者按鍵
-    # 每一毫秒更新一次，直到按下‘q’结束, 参数为0时表示视频暂停
-    key = cv2.waitKey(1)
-    if key == ord('q'):
-        break
+    # 添加图片附件
+    with open(image, 'rb') as file:
+        msg_image = MIMEImage(file.read(), _subtype=False)
 
-# 完成后释放资源
-video.release()
-# 关闭所有窗口
-video.destroyALLWindows()
+    # 此处id用于上面html获取图片
+    msg_image.add_header("Content-ID", 'image1')
+    msg.attach(msg_image)
 
+    return msg
 
 
+def send_email(message):
+    # 使用163邮箱作为SMTP服务器
+    host = "smtp.163.com"
+    port = 465
 
+    # 发件人
+    sender = "15683966878@163.com"
+    password = os.getenv('PASSWORD')
 
+    # 收件人
+    receiver = "2456327328@qq.com"
 
+    # 返回一个新的带有安全默认设置的上下文
+    context = ssl.create_default_context()
 
+    # 使用安全加密的SSL协议连接到SMTP服务器
+    with smtplib.SMTP_SSL(host, port, context=context) as server:
+        server.login(sender, password)
+        server.sendmail(sender, receiver, message)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+if __name__ == "__main__":
+    msg = create_email("images/test.jpg").as_string()
+    send_email(msg)

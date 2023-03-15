@@ -1,4 +1,7 @@
+import os
 from glob import glob
+from time import strftime
+
 import cv2
 from Emails_Back import create_email, send_email
 
@@ -17,11 +20,24 @@ first_frame = None
 status_list = []
 image_number = 0
 
+
+# 删除images文件夹中的所有图片
+def clean_images():
+    images = glob("images/*.png")
+    for img in images:
+        os.remove(img)
+
+
 while True:
     status = 0
     # 读取视频的下一帧，check返回值为是否成功获取视频帧
     # frame返回值为返回的视频帧
     check, frame = video.read()
+    # 给视频加上时间戳
+    current_time = strftime("%Y-%m-%d %H:%M:%S %A")
+    cv2.putText(img=frame, text=current_time, org=(50, 50),
+                fontFace=cv2.FONT_HERSHEY_PLAIN, fontScale=2,
+                color=(255, 0, 0), thickness=2, lineType=cv2.LINE_AA)
 
     # 如果读取错误，给出提示
     if not check:
@@ -36,17 +52,19 @@ while True:
     if first_frame is None:
         first_frame = gray_frame_gau
 
-    # 比较当前帧与第一帧，检测变化
+    # 比较当前帧与第一帧，把两幅图的差的绝对值输出到另一幅图上面来
     comp_frame = cv2.absdiff(first_frame, gray_frame_gau)
 
     # 使用二值转化函数，将灰阶比较图像中的>=30的值都赋为255白色,使对比更明显
-    thresh_frame = cv2.threshold(comp_frame, 47, 255, cv2.THRESH_BINARY)[1]
+    thresh_frame = cv2.threshold(comp_frame, 25, 255, cv2.THRESH_BINARY)[1]
     # 使用膨胀函数，将二值化后的灰阶图像进行轮廓加强处理
     dil_frame = cv2.dilate(thresh_frame, None, iterations=2)
 
+    # 显示带矩形轮廓的原图像
+    cv2.imshow('detect video', dil_frame)
+
     # 检测图像（即白色区域）周围的轮廓
     contours, check = cv2.findContours(dil_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
     for contour in contours:
         # 如果某个白色区域的轮廓大小小于1000，则判断为不是检测对象，跳出for循环继续判断
         if cv2.contourArea(contour) < 5000:
@@ -54,7 +72,7 @@ while True:
         # >=1000说明是检测对象，确定矩形参数
         x, y, w, h = cv2.boundingRect(contour)
         # 在原图像周围画出该绿色矩形
-        rectangle = cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 1)
+        rectangle = cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 1)
 
         # 检测到移动物体时将status置为1
         if rectangle.any():
@@ -73,11 +91,14 @@ while True:
     # 获取当前帧下状态列表最后俩元素的值
     status_list.append(status)
     status_list = status_list[-2:]
+    print(status_list)
 
     # 如果最后俩元素为[1, 0]则说明物体刚离开检测画面，此时再发邮件
     if status_list[0] == 1 and status_list[1] == 0:
         message = create_email(middle_image).as_string()
         send_email(message)
+        # 邮件发送后清除images文件夹
+        clean_images()
 
     # 显示带矩形轮廓的原图像
     cv2.imshow('detect video', frame)
@@ -92,5 +113,3 @@ while True:
 video.release()
 # 关闭所有窗口(注意是小写的ll，不是LL)
 cv2.destroyAllWindows()
-
-
