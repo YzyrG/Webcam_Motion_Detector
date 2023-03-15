@@ -1,9 +1,9 @@
 import os
 from glob import glob
 from time import strftime
-
 import cv2
 from Emails_Back import create_email, send_email
+from threading import Thread
 
 # opencv 讀取的 channel 順序是 B → G → R
 
@@ -46,7 +46,7 @@ while True:
     # 如果读取成功，图像转灰阶，三维变二维，减少图像矩阵复杂度
     gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     # 用高斯滤波函数，将灰阶图像平滑模糊化，减少高斯噪音
-    gray_frame_gau = cv2.GaussianBlur(gray_frame, (15, 15), 0)
+    gray_frame_gau = cv2.GaussianBlur(gray_frame, (21, 21), 0)
 
     # 保证first_frame的值是第一帧(转灰阶后的值)不变
     if first_frame is None:
@@ -67,7 +67,7 @@ while True:
     contours, check = cv2.findContours(dil_frame, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     for contour in contours:
         # 如果某个白色区域的轮廓大小小于1000，则判断为不是检测对象，跳出for循环继续判断
-        if cv2.contourArea(contour) < 5000:
+        if cv2.contourArea(contour) < 1000:
             continue
         # >=1000说明是检测对象，确定矩形参数
         x, y, w, h = cv2.boundingRect(contour)
@@ -96,9 +96,16 @@ while True:
     # 如果最后俩元素为[1, 0]则说明物体刚离开检测画面，此时再发邮件
     if status_list[0] == 1 and status_list[1] == 0:
         message = create_email(middle_image).as_string()
-        send_email(message)
-        # 邮件发送后清除images文件夹
-        clean_images()
+
+        # 使用线程处理发送邮件和清理images文件夹两项任务
+        email_thread = Thread(target=send_email, args=(message, ))
+        email_thread.daemon = True
+
+        # 邮件发送
+        clean_thread = Thread(target=clean_images)
+        clean_thread.daemon = True
+
+        email_thread.start()
 
     # 显示带矩形轮廓的原图像
     cv2.imshow('detect video', frame)
@@ -113,3 +120,5 @@ while True:
 video.release()
 # 关闭所有窗口(注意是小写的ll，不是LL)
 cv2.destroyAllWindows()
+# 清除images文件夹
+clean_thread.start()
